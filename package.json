@@ -1,0 +1,20 @@
+{
+  "name": "insertdatafromnode",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "express": "^4.21.1",
+    "fs": "^0.0.1-security",
+    "http": "^0.0.1-security",
+    "joi": "^17.13.3",
+    "mysql2": "^3.11.4",
+    "nodemon": "^3.1.7"
+  }
+}
