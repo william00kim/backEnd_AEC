@@ -2,16 +2,25 @@ const express = require("express")
 const http = require('http');
 const Joi = require("joi");
 const app = express();
+const bcrypt = require('bcrypt');
 var bodyParser = require('body-parser');
 
 const mysql = require('mysql2/promise'); // promise 기반 mysql2 사용
 const fs = require('fs');
+const e = require("express");
 
 const dbConfig1 = {
     host: '3.38.63.26', // MySQL 서버 호스트
     user: 'app_user',      // MySQL 사용자 이름
     password: 'User1234', // MySQL 비밀번호
-    database: 'userinfo'   // 사용할 데이터베이스 이름
+    database: 'userInfo'   // 사용할 데이터베이스 이름
+};
+
+const dbConfigm = {
+    host: '3.38.63.26', // MySQL 서버 호스트
+    user: 'william00kim',      // MySQL 사용자 이름
+    password: 'william00kim', // MySQL 비밀번호
+    database: 'userInfo'   // 사용할 데이터베이스 이름
 };
 
 const dbConfig2 = {
@@ -28,6 +37,8 @@ const dbConfig3 = {
     database: 'handicap'   // 사용할 데이터베이스 이름
 };
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 회원 정보 Joi 스키마 정의
 const userSchema = Joi.object({
@@ -35,77 +46,261 @@ const userSchema = Joi.object({
     PASSWORD: Joi.string().min(8).required(),
     USERNAME: Joi.string().alphanum().min(3).max(5).required(),
     USERBIRTH: Joi.string().required(),
-    HANDICAP: Joi.boolean().required(),
-  });
-  
-  // 회원가입 API (회원정보 등록)
-  app.post("/createUser/register", async (req, res) => {
+    HANDICAP: Joi.boolean().required()
+});
+
+// app.post('/addUser', async (req, res) => {
+//     const {USER_ID, PASSWORD, USERNAME, USERBIRTH ,HANDICAP } = req.body;
+
+//     console.error(req.body);
+//     try {
+//         const query = 'INSERT INTO user (USER_ID, PASSWORD, USERNAME, USERBIRTH ,HANDICAP) VALUES (?, ?, ?, ?, ?)';
+//         const db = await mysql.createConnection(dbConfig1)
+//         await hashPassword(PASSWORD).then((res) => {
+//             db.query(query, [USER_ID, res, USERNAME, USERBIRTH ,HANDICAP] , (err, results) => {
+//                 console.error(results.body);
+//                 if (err) {
+//                     console.error('Error inserting data:', err);
+//                     return res.status(500).send('Database error');
+//                 }
+//                 res.json({
+//                     "result" : "0"
+//                 })
+
+//                 db.end(); // 연결 종료
+//             })
+            
+
+//         })
+        
+//     } catch(err) {
+//         console.log(req.query);
+//         res.status(500).send(`데이터베이스 오류입니다.  ${err.stack}`);
+//         return;
+//     }
+    
+// })
+
+app.post('/addUser', async (req, res) => {
+    const { USER_ID, PASSWORD, USERNAME, USERBIRTH, HANDICAP } = req.body;
+
+    console.error(req.body); // 요청 본문 출력
+
     try {
-      // 요청 데이터 유효성 검사
-      const { error, value } = userSchema.validate(req.body);
-      if (error) {
-        return res.status(400).json({ error: error.details[0].message });
-      }
-  
-      const { USER_ID, PASSWORD, USERNAME, HANDICAP } = value;
-  
-      // 데이터 삽입 SQL
-      const query = `INSERT INTO users (USER_ID, PASSWORD, USERNAME, USERBIRTH, HANDICAP) VALUES (?, ?, ?, ?, ?)`;
-  
-      // 데이터베이스 연결 및 실행
-      const connection = await mysql.createConnection(dbConfigs.userInfo);
-      const [result] = await connection.query(query, [USER_ID, PASSWORD, USERNAME, USERBIRTH, HANDICAP]);
-  
-      await connection.end();
-  
-      res.status(201).json({ message: "User registered successfully", userId: result.insertId });
+        // 비밀번호 해시화
+        const hashedPassword = await hashPassword(PASSWORD);
+
+        // 데이터베이스 연결 생성
+        const db = await mysql.createConnection(dbConfig1);
+
+        // SQL 쿼리 실행
+        const query = 'INSERT INTO user (USER_ID, PASSWORD, USERNAME, USERBIRTH, HANDICAP) VALUES (?, ?, ?, ?, ?)';
+        db.query(query, [USER_ID, hashedPassword, USERNAME, USERBIRTH, HANDICAP], (err, results) => {
+            if (err) {
+                console.error('Error inserting data:', err);
+                db.end(); // 연결 종료
+                return res.status(500).json({ result: 0 }); // 에러 시 응답
+            }
+
+            // 성공 시 응답
+            console.log('Data inserted successfully:', results);
+            
+
+            db.end(); // 연결 종료
+        });
+
+        res.json({ result: 1 });
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Internal server error" });
+        console.error('Database error:', err.stack);
+        res.status(500).send(`데이터베이스 오류입니다: ${err.stack}`);
     }
-  });
+});
 
-  app.post('addUser', (req, res) => {
-    const {USER_ID, PASSWORD, USERNAME, USERBIRTH ,HANDICAP } = req.body;
 
-    const query = 'INSERT INTO users (USER_ID, PASSWORD, USERNAME, USERBIRTH ,HANDICAP) VALUES (?, ?, ?, ?, ?)';
-    db.query(query, [name, email], (err, results) => {
-        if (err) {
-            console.error('Error inserting data:', err);
-            return res.status(500).send('Database error');
-        }
-        res.status(200).send('Data inserted successfully!');
-    });
 
-  })
-  
-//원하는 운동 장소 찾기 비장애인 데이터
-app.get("/nonhandi/:name", async (req, res) => {
+//아이디 확인하기
+app.get("/checkId/:id", async (req, res) => {
+
+    const Userid = req.params;
+
     try {
-        const {name} = req.params;
-        const conection = await mysql.createConnection(dbConfig2);
+        const conection = await mysql.createConnection(dbConfig1);
         const query = 
         `
-            SELECT *
-            FROM non_handicap.users
-            WHERE FCLTY_NM = ?
+            SELECT USER_ID, USERNAME, USERBIRTH, HANDICAP 
+            FROM userInfo.user
+            WHERE USER_ID = ?
         `;
         
-        const [rows] = await conection.query(query, name);
-        res.json(rows);
+        const rows = await conection.query(query, Userid.id);
+        // res.json(rows);
         
         await conection.end();
-        console.log(rows);
+
+        if(Userid.id === rows[0][0].USER_ID) {
+            res.json({
+                result : "이미 존재히는 계정입니다."
+            })
+        }
 
     } catch(err) {
         console.log(req.query);
         res.status(500).send(`데이터베이스 오류입니다.  ${err.stack}`);
         return;
     }
+    
+})
+
+app.post("/checkId", async(req, res) => {
+    const {USER_ID} = req.body;
+
+    try {
+        const conection = await mysql.createConnection(dbConfig1);
+        const query = 
+        `
+            SELECT USER_ID 
+            FROM userInfo.user
+            WHERE USER_ID = ?
+        `;
+        
+        const rows = await conection.query(query, [USER_ID]);
+        
+        await conection.end();
+
+        if(USER_ID === rows[0][0].USER_ID) {
+            res.json({
+                result : 0
+            })
+        } else {
+            res.json({
+                result : 1
+            })
+        }
+
+    } catch(err) {
+        console.log(req.query);
+        res.json({
+            result : 1
+        })
+        return;
+    }
+})
+
+//내정보 찾기
+app.post("/findHandi", async(req, res) => {
+    const {id} = req.body;
+
+    console.error(req.body);
+
+    try {
+        const connection = await mysql.createConnection(dbConfigm);
+
+        const query = `
+            SELECT HANDICAP
+            FROM userInfo.user
+            WHERE USER_ID = ?;
+        `;
+        
+        const row = await connection.query(query ,[id])
+
+        console.log(row[0][0].HANDICAP)
+
+        res.status(200).json({
+            "Handicap" : row[0][0].HANDICAP
+        })
+
+    } catch(err) {
+        console.log(err);
+        res.status(500).send(`데이터베이스 오류입니다.  ${err.stack}`);
+        return;
+    }
+})
+
+app.post("/myInfo", async(req, res) => {
+    const {USER_ID} = req.body;
+
+    console.error(req.body);
+
+    try {
+        const connection = await mysql.createConnection(dbConfigm);
+
+        const query = `
+            SELECT USER_ID, USERNAME, USERBIRTH, HANDICAP
+            FROM userInfo.user
+            WHERE USER_ID = ?;
+        `;
+        
+        const row = await connection.query(query ,[USER_ID])
+
+        console.log(row[0][0].HANDICAP)
+
+        res.status(200).json({
+            "USER_ID" : row[0][0].USER_ID,
+            "USERNAME" : row[0][0].USERNAME,
+            "USERBIRTH" : row[0][0].USERBIRTH,
+            "Handicap" : row[0][0].HANDICAP
+        })
+
+    } catch(err) {
+        console.log(err);
+        res.status(500).send(`데이터베이스 오류입니다.  ${err.stack}`);
+        return;
+    }
+})
+
+//로그인 하기
+app.post("/login", async(req, res) => {
+    const { USER_ID, PASSWORD } = req.body;
+
+    try {
+        const connection = await mysql.createConnection(dbConfig1);
+
+        const query = 
+        `
+            SELECT USER_ID, PASSWORD
+            FROM userInfo.user
+            WHERE USER_ID = ?
+        `;
+        
+        const rows = await connection.query(query, [USER_ID]);
+
+        console.log(rows[0][0].USER_ID);
+        console.log(rows[0][0].PASSWORD);
+        
+        const isMatch = await bcrypt.compare(PASSWORD, rows[0][0].PASSWORD);
+
+        await connection.end();
+
+        if(isMatch) {
+            console.log("로그인 성공");
+            res.status(200).json({
+                "message" : "로그인 성공."
+            })
+        } else {
+            console.log("로그인 실패");
+            res.status(200).json({
+                "message" : "로그인 실패."
+            })
+        }
+
+    } catch(err) {
+        console.log(err);
+        res.status(500).send(`데이터베이스 오류입니다.  ${err.stack}`);
+        return;
+    }
+})
+
+app.post("/findId", (res, req) => {
+    
+})
+
+app.post("/findPW", (res, req) => {
+
 })
 
 //장애인 데이터
 app.get("/handi/:name", async (req, res) => {
+
     try {
         const {name} = req.params;
         const conection = await mysql.createConnection(dbConfig3);
@@ -116,11 +311,11 @@ app.get("/handi/:name", async (req, res) => {
             WHERE FCLTY_NM = ?
         `;
         
-        const [rows] = await conection.query(query, name);
-        res.json(rows);
+        const [rows] = await conection.query(query, [name]);
+        
+        console.log(rows)
         
         await conection.end();
-        console.log(rows);
 
     } catch(err) {
         console.log(req.query);
@@ -129,6 +324,14 @@ app.get("/handi/:name", async (req, res) => {
     }
 })
 
-app.listen(8000, () => {
+
+//암호화 하는 코드
+async function hashPassword(password) {
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    return hashedPassword;
+}
+
+app.listen(3030, () => {
     console.log("서버 실행");
 })

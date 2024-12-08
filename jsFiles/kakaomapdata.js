@@ -3,7 +3,7 @@ const axios = require("axios");
 const mysql = require("mysql2/promise");
 
 const app = express();
-const PORT = 3050;
+const PORT = 3030;
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -57,6 +57,8 @@ app.get("/findNearbyFacilities/:lat/:lng", async (req, res) => {
 
         // 운동시설 정보
         const facilities = response.data.documents;
+
+        console.log(response.data.documents[1]);
 
         // 2. 거리 계산 추가
         const facilitiesWithDistance = facilities.map((facility) => {
